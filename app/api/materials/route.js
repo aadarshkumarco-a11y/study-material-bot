@@ -1,5 +1,9 @@
 // app/api/materials/route.js — Get all materials + increment views
+// BUG 1 FIX: Never cache — always return fresh data
 import { getAllMaterials, incrementViews } from "@/lib/storage";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET(request) {
   try {
@@ -13,7 +17,12 @@ export async function GET(request) {
       limit: searchParams.get("limit"),
     };
     const result = await getAllMaterials(filters);
-    return Response.json(result);
+    return Response.json(result, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        Pragma: "no-cache",
+      },
+    });
   } catch (e) {
     return Response.json({ error: e.message }, { status: 500 });
   }

@@ -12,7 +12,8 @@ export default function VideosTab({ searchQuery, onVideoClick }) {
   const load = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/materials?type=video&limit=50${searchQuery ? `&subject=${encodeURIComponent(searchQuery)}` : ""}`);
+      // Cache-bust: add timestamp so browser never uses cached response
+      const res = await fetch(`/api/materials?type=video&limit=50&t=${Date.now()}`);
       const data = await res.json();
       let filtered = data.materials || [];
       if (searchQuery) {
@@ -32,6 +33,16 @@ export default function VideosTab({ searchQuery, onVideoClick }) {
   };
 
   useEffect(() => { load(); }, [searchQuery]);
+
+  // Re-fetch when app comes to foreground (user switches back to Telegram)
+  useEffect(() => {
+    const onFocus = () => load();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") load();
+    });
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
 
   const refresh = () => { setRefreshing(true); load(); };
 

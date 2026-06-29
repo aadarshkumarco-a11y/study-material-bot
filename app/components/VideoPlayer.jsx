@@ -2,8 +2,10 @@
 import { useState, useRef, useEffect } from "react";
 import { ArrowLeft, Play, Pause, SkipBack, SkipForward, Volume2, Settings, Download, Send, ThumbsUp, ThumbsDown, Eye, Clock } from "lucide-react";
 import { formatDuration, formatViews, timeAgo } from "@/lib/utils";
+import RelatedVideos from "@/app/components/RelatedVideos";
 
 export default function VideoPlayer({ material, allMaterials, onClose, onVideoClick }) {
+  const [currentVideo, setCurrentVideo] = useState(material);
   const videoRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -15,19 +17,19 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
   const [resumePos, setResumePos] = useState(null);
   const [liked, setLiked] = useState(false);
   const [disliked, setDisliked] = useState(false);
-  const [likeCount, setLikeCount] = useState(material.likes || Math.floor((material.views || 0) * 0.06));
-  const [dislikeCount, setDislikeCount] = useState(material.dislikes || Math.floor((material.views || 0) * 0.005));
+  const [likeCount, setLikeCount] = useState(currentVideo.likes || Math.floor((currentVideo.views || 0) * 0.06));
+  const [dislikeCount, setDislikeCount] = useState(currentVideo.dislikes || Math.floor((currentVideo.views || 0) * 0.005));
   const controlsTimeout = useRef(null);
   const posSaveInterval = useRef(null);
 
-  const streamUrl = `/api/stream?file_id=${material.file_id}`;
+  const streamUrl = `/api/stream?file_id=${currentVideo.file_id}`;
   const botUsername = process.env.NEXT_PUBLIC_BOT_USERNAME || "semxybhabhi_bot";
 
   // Related videos (same subject or random)
   const related = (allMaterials || [])
-    .filter((m) => m.id !== material.id && (m.subject === material.subject || m.type === "video"))
+    .filter((m) => m.id !== currentVideo.id && (m.subject === currentVideo.subject || m.type === "video"))
     .slice(0, 8);
-  const fallbackRelated = (allMaterials || []).filter((m) => m.id !== material.id).slice(0, 8);
+  const fallbackRelated = (allMaterials || []).filter((m) => m.id !== currentVideo.id).slice(0, 8);
   const moreVideos = related.length > 0 ? related : fallbackRelated;
 
   useEffect(() => {
@@ -35,13 +37,13 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
     if (!v) return;
 
     // Check resume position
-    const saved = localStorage.getItem(`resume_${material.file_id}`);
+    const saved = localStorage.getItem(`resume_${currentVideo.file_id}`);
     if (saved && parseFloat(saved) > 5) {
       setResumePos(parseFloat(saved));
     }
 
     // Load like/dislike state
-    const likeState = localStorage.getItem(`liked_${material.id}`);
+    const likeState = localStorage.getItem(`liked_${currentVideo.id}`);
     if (likeState === "1") setLiked(true);
     if (likeState === "-1") setDisliked(true);
 
@@ -70,7 +72,7 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
     // Save position every 5 seconds
     posSaveInterval.current = setInterval(() => {
       if (v && !v.paused && v.currentTime > 0) {
-        localStorage.setItem(`resume_${material.file_id}`, String(v.currentTime));
+        localStorage.setItem(`resume_${currentVideo.file_id}`, String(v.currentTime));
       }
     }, 5000);
 
@@ -84,10 +86,10 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
       v.removeEventListener("playing", onPlaying);
       clearInterval(posSaveInterval.current);
       if (v.currentTime > 0) {
-        localStorage.setItem(`resume_${material.file_id}`, String(v.currentTime));
+        localStorage.setItem(`resume_${currentVideo.file_id}`, String(v.currentTime));
       }
     };
-  }, [material.file_id, material.id, resumePos]);
+  }, [currentVideo.file_id, currentVideo.id, resumePos]);
 
   // Controls auto-hide
   const resetControlsTimer = () => {
@@ -140,7 +142,7 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
 
   const handleDownload = async () => {
     try {
-      const res = await fetch(`/api/file?file_id=${material.file_id}`);
+      const res = await fetch(`/api/file?file_id=${currentVideo.file_id}`);
       const data = await res.json();
       if (data.url) window.open(data.url, "_blank");
     } catch {
@@ -160,12 +162,12 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
     if (liked) {
       setLiked(false);
       setLikeCount((c) => c - 1);
-      localStorage.removeItem(`liked_${material.id}`);
+      localStorage.removeItem(`liked_${currentVideo.id}`);
     } else {
       setLiked(true);
       setLikeCount((c) => c + 1);
       if (disliked) { setDisliked(false); setDislikeCount((c) => c - 1); }
-      localStorage.setItem(`liked_${material.id}`, "1");
+      localStorage.setItem(`liked_${currentVideo.id}`, "1");
     }
   };
 
@@ -173,12 +175,12 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
     if (disliked) {
       setDisliked(false);
       setDislikeCount((c) => c - 1);
-      localStorage.removeItem(`liked_${material.id}`);
+      localStorage.removeItem(`liked_${currentVideo.id}`);
     } else {
       setDisliked(true);
       setDislikeCount((c) => c + 1);
       if (liked) { setLiked(false); setLikeCount((c) => c - 1); }
-      localStorage.setItem(`liked_${material.id}`, "-1");
+      localStorage.setItem(`liked_${currentVideo.id}`, "-1");
     }
   };
 
@@ -254,11 +256,11 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
 
       {/* Title + meta */}
       <div className="px-4 pt-2">
-        <h2 className="text-white text-lg font-bold mb-1">{material.title}</h2>
+        <h2 className="text-white text-lg font-bold mb-1">{currentVideo.title}</h2>
         <div className="flex items-center gap-2 text-gray-400 text-xs">
-          <span>📅 {timeAgo(material.uploadedAt)}</span>
-          {material.duration && <span>⏱ {formatDuration(material.duration)}</span>}
-          <span>👁 {formatViews(material.views)} views</span>
+          <span>📅 {timeAgo(currentVideo.uploadedAt)}</span>
+          {currentVideo.duration && <span>⏱ {formatDuration(currentVideo.duration)}</span>}
+          <span>👁 {formatViews(currentVideo.views)} views</span>
         </div>
       </div>
 
@@ -281,42 +283,20 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
           <ThumbsDown size={14} fill={disliked ? "currentColor" : "none"} /> {formatViews(dislikeCount)}
         </button>
         <span className="text-gray-600">|</span>
-        <span className="flex items-center gap-1 text-white"><Eye size={12} /> {formatViews(material.views)}</span>
+        <span className="flex items-center gap-1 text-white"><Eye size={12} /> {formatViews(currentVideo.views)}</span>
         <span className="flex items-center gap-1 text-gray-500"><span className="w-1.5 h-1.5 rounded-full bg-online" /> CDN1 · HD</span>
       </div>
 
-      {/* MORE VIDEOS */}
-      {moreVideos.length > 0 && (
-        <div className="mt-4">
-          <div className="flex items-center gap-2 px-4 mb-2">
-            <div className="flex-1 h-px bg-[#1a1a1a]" />
-            <span className="text-gray-500 text-[11px] font-bold uppercase">More Videos</span>
-            <div className="flex-1 h-px bg-[#1a1a1a]" />
-          </div>
-          {moreVideos.map((m) => (
-            <div key={m.id} onClick={() => onVideoClick(m)} className="flex gap-3 px-4 py-2 cursor-pointer card-tap">
-              <div className="relative w-[120px] h-[80px] flex-shrink-0 rounded-lg overflow-hidden bg-surface2">
-                {m.thumbnail_file_id ? (
-                  <img src={`/api/stream?file_id=${m.thumbnail_file_id}`} alt="" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = "none"; }} />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center"><Play size={20} className="text-gray-600" /></div>
-                )}
-                {m.isPremium && (
-                  <span className="absolute top-1 left-1 bg-[#D69E2E] text-black text-[8px] font-bold px-1 py-0.5 rounded">★ VIP</span>
-                )}
-                {m.duration && (
-                  <span className="absolute bottom-1 left-1 bg-black/70 text-white text-[9px] px-1 py-0.5 rounded">{formatDuration(m.duration)}</span>
-                )}
-              </div>
-              <div className="flex-1 min-w-0 py-1">
-                <p className="text-white text-[13px] font-bold leading-tight line-clamp-2">{m.title}</p>
-                {m.isPremium && <span className="inline-block mt-0.5 text-[9px] text-[#D69E2E]">👑 VIP</span>}
-                <p className="text-gray-500 text-[10px] mt-0.5">{timeAgo(m.uploadedAt)} · 👁 {formatViews(m.views)}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* MORE VIDEOS — RelatedVideos component with tap-to-swap */}
+      <RelatedVideos
+        currentId={currentVideo.id}
+        subject={currentVideo.subject}
+        allVideos={allMaterials}
+        onSelect={(v) => {
+          setCurrentVideo(v);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }}
+      />
 
       {/* Credit footer */}
       <div

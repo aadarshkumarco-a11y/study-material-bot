@@ -42,21 +42,27 @@ export async function POST(request) {
 
     console.log("[webhook] from:", fromId, "admin:", isAdmin, "isAdminCheck:", ADMIN_CHAT_ID);
 
-    // ---- Admin: Video upload ----
+    // ---- Admin: Video upload (auto count-based naming) ----
     if (msg.video && isAdmin) {
       const video = msg.video;
-      const caption = msg.caption || "";
-      const [title, subject] = caption.split("|").map((s) => s.trim());
+
+      // Get current count for auto-naming
+      const { materials: allMats } = await getAllMaterials();
+      const videoCount = allMats.filter((m) => m.type === "video").length;
+      const newCount = videoCount + 1;
+      const autoTitle = `Video ${newCount}`;
 
       const material = {
         id: Date.now().toString(),
         file_id: video.file_id,
         type: "video",
-        title: title || "Untitled Video",
-        subject: subject || "General",
+        title: autoTitle,
+        subject: "General",
         duration: video.duration,
         size: video.file_size,
         views: 0,
+        likes: 0,
+        dislikes: 0,
         isPremium: false,
         uploadedAt: new Date().toISOString(),
         thumbnail_file_id: video.thumbnail?.file_id || null,
@@ -64,13 +70,10 @@ export async function POST(request) {
       await saveMaterial(material);
       const sizeMB = (video.file_size / 1048576).toFixed(1);
       await reply(chatId,
-        `✅ Video Saved!\n\n` +
-        `📋 File ID: <code>${video.file_id}</code>\n` +
-        `🎬 Type: Video\n` +
-        `📦 Size: ${sizeMB} MB\n` +
-        `⏱ Duration: ${Math.floor(video.duration / 60)} min ${video.duration % 60} sec\n` +
-        `📅 Saved: ${new Date().toLocaleString("en-IN")}\n\n` +
-        (title ? `📚 Title: ${title}\n📂 Subject: ${subject || "General"}\n` : `⚠️ No title set yet!\nUse this command to add title:\n\n/edit ${video.file_id} | Your Title Here | Subject Name`)
+        `✅ Saved as "${autoTitle}"\n\n` +
+        `⏱ Duration: ${Math.floor(video.duration / 60)}:${String(video.duration % 60).padStart(2, "0")}\n` +
+        `📦 Size: ${sizeMB} MB\n\n` +
+        `🔄 App will show it instantly!`
       );
       return new Response("OK", { status: 200 });
     }
@@ -147,7 +150,7 @@ export async function POST(request) {
           await reply(chatId, "📭 No materials uploaded yet.\n\nSend a video/document with caption:\nTitle | Subject");
         } else {
           const list = materials.slice(0, 20).map((m, i) =>
-            `${i + 1}. ${m.title} (${m.type})\n   🆔 <code>${(m.file_id || "").substring(0, 30)}...</code>`
+            `${i + 1}. ${m.title} (${m.type})`
           ).join("\n");
           await reply(chatId, `📋 Materials (${materials.length} total):\n\n${list}`);
         }
@@ -175,29 +178,6 @@ export async function POST(request) {
         const { materials } = await getAllMaterials();
         const totalViews = materials.reduce((s, m) => s + (m.views || 0), 0);
         await reply(chatId, `📊 Stats:\n📚 Total: ${materials.length}\n👁 Views: ${totalViews}`);
-        return new Response("OK", { status: 200 });
-      }
-
-      if (cmd === "/edit") {
-        const text = msg.text.replace("/edit", "").trim();
-        const parts = text.split("|").map((s) => s.trim());
-        if (parts.length < 2) {
-          await reply(chatId, "❌ Wrong format!\n\nUse:\n/edit <file_id> | <title> | <subject>\n\nExample:\n/edit BQACAgIA... | DSA Lecture 1 | DSA");
-          return new Response("OK", { status: 200 });
-        }
-        const [fileId, editTitle, editSubject] = parts;
-        const updated = await updateMaterial(fileId, { title: editTitle, subject: editSubject || "General" });
-        if (!updated) {
-          await reply(chatId, "❌ File ID not found. Upload the video first, then use /edit.");
-          return new Response("OK", { status: 200 });
-        }
-        await reply(chatId,
-          `✅ Updated Successfully!\n\n` +
-          `📚 Title: ${editTitle}\n` +
-          `📂 Subject: ${editSubject || "General"}\n` +
-          `🆔 File ID: <code>${fileId.substring(0, 30)}...</code>\n\n` +
-          `Students can now see this in the app! 🎉`
-        );
         return new Response("OK", { status: 200 });
       }
     }
