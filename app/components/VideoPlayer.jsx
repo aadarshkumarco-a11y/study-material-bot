@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { ArrowLeft, Play, Pause, SkipBack, SkipForward, Volume2, Settings, Download, Send, ThumbsUp, ThumbsDown, Eye, Clock } from "lucide-react";
 import { formatDuration, formatViews, timeAgo } from "@/lib/utils";
 import RelatedVideos from "@/app/components/RelatedVideos";
@@ -22,8 +22,8 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
   const controlsTimeout = useRef(null);
   const posSaveInterval = useRef(null);
 
-  // Cache-bust stream URL so browser never caches stale stream
-  const streamUrl = `/api/stream?file_id=${currentVideo.file_id}&t=${Date.now()}`;
+  // STABLE stream URL — only changes when file_id changes (NOT on every render!)
+  const streamUrl = useMemo(() => `/api/stream?file_id=${currentVideo.file_id}`, [currentVideo.file_id]);
   const botUsername = process.env.NEXT_PUBLIC_BOT_USERNAME || "semxybhabhi_bot";
 
   // Related videos (same subject or random)
@@ -211,7 +211,6 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
                   setError(null);
                   setLoading(true);
                   if (videoRef.current) {
-                    videoRef.current.src = streamUrl;
                     videoRef.current.load();
                   }
                 }}
@@ -225,9 +224,10 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
         )}
         <video
           ref={videoRef}
+          src={streamUrl}
           className="max-w-full max-h-[40vh]"
           playsInline
-          preload="metadata"
+          preload="auto"
           onClick={togglePlay}
         />
         {/* Center play button */}
