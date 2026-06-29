@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import CreditFooter from "@/app/components/CreditFooter";
 import { RefreshCw } from "lucide-react";
 import VideoCard from "@/app/components/VideoCard";
@@ -8,19 +8,17 @@ export default function VideosTab({ searchQuery, onVideoClick }) {
   const [materials, setMaterials] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const pollRef = useRef(null);
 
-  const load = async () => {
-    setLoading(true);
+  const load = useCallback(async () => {
     try {
-      // Cache-bust: add timestamp so browser never uses cached response
       const res = await fetch(`/api/materials?type=video&limit=50&t=${Date.now()}`);
       const data = await res.json();
       let filtered = data.materials || [];
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        filtered = filtered.filter(m =>
-          m.title?.toLowerCase().includes(q) ||
-          m.subject?.toLowerCase().includes(q)
+        filtered = filtered.filter(
+          (m) => m.title?.toLowerCase().includes(q) || m.subject?.toLowerCase().includes(q)
         );
       }
       setMaterials(filtered);
@@ -30,21 +28,40 @@ export default function VideosTab({ searchQuery, onVideoClick }) {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [searchQuery]);
 
-  useEffect(() => { load(); }, [searchQuery]);
+  // Fetch on mount + when search changes
+  useEffect(() => {
+    setLoading(true);
+    load();
+  }, [load]);
 
-  // Re-fetch when app comes to foreground (user switches back to Telegram)
+  // Auto-poll every 5 seconds (so new uploads appear without manual refresh)
+  useEffect(() => {
+    pollRef.current = setInterval(() => {
+      load();
+    }, 5000);
+    return () => clearInterval(pollRef.current);
+  }, [load]);
+
+  // Re-fetch when app comes to foreground
   useEffect(() => {
     const onFocus = () => load();
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", () => {
+    const onVisible = () => {
       if (document.visibilityState === "visible") load();
-    });
-    return () => window.removeEventListener("focus", onFocus);
-  }, []);
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [load]);
 
-  const refresh = () => { setRefreshing(true); load(); };
+  const refresh = () => {
+    setRefreshing(true);
+    load();
+  };
 
   if (loading) {
     return (

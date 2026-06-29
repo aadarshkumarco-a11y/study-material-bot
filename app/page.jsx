@@ -64,19 +64,25 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch stats + all materials
+  // Fetch stats + all materials + auto-poll for new uploads
   useEffect(() => {
-    fetch("/api/stats")
-      .then(r => r.json())
-      .then(data => {
-        if (data.onlineUsers) setOnlineCount(data.onlineUsers);
-      })
-      .catch(() => {});
-    // Fetch all materials for related videos
-    fetch("/api/materials?limit=100")
-      .then(r => r.json())
-      .then(data => setAllMaterials(data.materials || []))
-      .catch(() => {});
+    const fetchAll = () => {
+      fetch(`/api/stats?t=${Date.now()}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.onlineUsers) setOnlineCount(data.onlineUsers);
+        })
+        .catch(() => {});
+      // Fetch all materials (cache-bust)
+      fetch(`/api/materials?limit=100&t=${Date.now()}`)
+        .then(r => r.json())
+        .then(data => setAllMaterials(data.materials || []))
+        .catch(() => {});
+    };
+    fetchAll();
+    // Poll every 5 seconds for new uploads
+    const interval = setInterval(fetchAll, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleLogin = useCallback(() => {

@@ -22,7 +22,8 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
   const controlsTimeout = useRef(null);
   const posSaveInterval = useRef(null);
 
-  const streamUrl = `/api/stream?file_id=${currentVideo.file_id}`;
+  // Cache-bust stream URL so browser never caches stale stream
+  const streamUrl = `/api/stream?file_id=${currentVideo.file_id}&t=${Date.now()}`;
   const botUsername = process.env.NEXT_PUBLIC_BOT_USERNAME || "semxybhabhi_bot";
 
   // Related videos (same subject or random)
@@ -203,14 +204,30 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
         )}
         {error && (
           <div className="text-center px-8 py-12">
-            <p className="text-accent text-sm mb-2">{error}</p>
-            <button onClick={handleDownload} className="text-tgblue text-xs underline">Download instead</button>
+            <p className="text-accent text-sm mb-3">{error}</p>
+            <div className="flex flex-col gap-2 items-center">
+              <button
+                onClick={() => {
+                  setError(null);
+                  setLoading(true);
+                  if (videoRef.current) {
+                    videoRef.current.src = streamUrl;
+                    videoRef.current.load();
+                  }
+                }}
+                className="bg-accent text-white px-4 py-2 rounded-lg text-sm font-bold"
+              >
+                Retry
+              </button>
+              <button onClick={handleDownload} className="text-tgblue text-xs underline">Download instead</button>
+            </div>
           </div>
         )}
         <video
           ref={videoRef}
           className="max-w-full max-h-[40vh]"
           playsInline
+          preload="metadata"
           onClick={togglePlay}
         />
         {/* Center play button */}
