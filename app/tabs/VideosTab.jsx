@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import CreditFooter from "@/app/components/CreditFooter";
 import { RefreshCw } from "lucide-react";
 import VideoCard from "@/app/components/VideoCard";
 
@@ -78,6 +79,7 @@ export default function VideosTab({ searchQuery, onVideoClick }) {
           ))}
         </div>
       )}
+      <CreditFooter />
     </div>
   );
 }

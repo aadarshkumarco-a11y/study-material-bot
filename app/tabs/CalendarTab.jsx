@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import CreditFooter from "@/app/components/CreditFooter";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -125,6 +126,7 @@ export default function CalendarTab() {
           )}
         </div>
       )}
+      <CreditFooter />
     </div>
   );
 }

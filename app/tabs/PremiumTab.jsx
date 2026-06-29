@@ -1,5 +1,6 @@
 "use client";
 import { Lock, Play, CreditCard, Star } from "lucide-react";
+import CreditFooter from "@/app/components/CreditFooter";
 
 export default function PremiumTab({ user, onLogin }) {
   const plans = [
@@ -84,6 +85,7 @@ export default function PremiumTab({ user, onLogin }) {
           ))}
         </div>
       </div>
+      <CreditFooter />
     </div>
   );
 }

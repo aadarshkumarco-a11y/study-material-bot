@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import CreditFooter from "@/app/components/CreditFooter";
 import PostCard from "@/app/components/PostCard";
 
 const FILTERS = [
@@ -94,6 +95,7 @@ export default function PostsTab({ searchQuery, onPostClick }) {
           ))}
         </div>
       )}
+      <CreditFooter />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import CreditFooter from "@/app/components/CreditFooter";
 import { RefreshCw, Search } from "lucide-react";
 import DiskCard from "@/app/components/DiskCard";
 
@@ -86,6 +87,7 @@ export default function DiskTab({ onDiskClick }) {
           ))}
         </div>
       )}
+      <CreditFooter />
     </div>
   );
 }

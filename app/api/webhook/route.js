@@ -1,5 +1,5 @@
 // app/api/webhook/route.js — Telegram bot webhook (manual, no Telegraf)
-import { saveMaterial, deleteMaterial, togglePremium, getAllMaterials } from "@/lib/storage";
+import { saveMaterial, deleteMaterial, togglePremium, getAllMaterials, updateMaterial } from "@/lib/storage";
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ADMIN_CHAT_ID = parseInt(process.env.ADMIN_CHAT_ID);
@@ -62,7 +62,16 @@ export async function POST(request) {
         thumbnail_file_id: video.thumbnail?.file_id || null,
       };
       await saveMaterial(material);
-      await reply(chatId, `✅ Video saved!\n📚 ${material.title}\n📂 ${material.subject}\n⏱ ${Math.floor(video.duration / 60)} mins`);
+      const sizeMB = (video.file_size / 1048576).toFixed(1);
+      await reply(chatId,
+        `✅ Video Saved!\n\n` +
+        `📋 File ID: <code>${video.file_id}</code>\n` +
+        `🎬 Type: Video\n` +
+        `📦 Size: ${sizeMB} MB\n` +
+        `⏱ Duration: ${Math.floor(video.duration / 60)} min ${video.duration % 60} sec\n` +
+        `📅 Saved: ${new Date().toLocaleString("en-IN")}\n\n` +
+        (title ? `📚 Title: ${title}\n📂 Subject: ${subject || "General"}\n` : `⚠️ No title set yet!\nUse this command to add title:\n\n/edit ${video.file_id} | Your Title Here | Subject Name`)
+      );
       return new Response("OK", { status: 200 });
     }
 
@@ -137,7 +146,9 @@ export async function POST(request) {
         if (materials.length === 0) {
           await reply(chatId, "📭 No materials uploaded yet.\n\nSend a video/document with caption:\nTitle | Subject");
         } else {
-          const list = materials.slice(0, 20).map((m, i) => `${i + 1}. ${m.title} (${m.type})`).join("\n");
+          const list = materials.slice(0, 20).map((m, i) =>
+            `${i + 1}. ${m.title} (${m.type})\n   🆔 <code>${(m.file_id || "").substring(0, 30)}...</code>`
+          ).join("\n");
           await reply(chatId, `📋 Materials (${materials.length} total):\n\n${list}`);
         }
         return new Response("OK", { status: 200 });
@@ -164,6 +175,29 @@ export async function POST(request) {
         const { materials } = await getAllMaterials();
         const totalViews = materials.reduce((s, m) => s + (m.views || 0), 0);
         await reply(chatId, `📊 Stats:\n📚 Total: ${materials.length}\n👁 Views: ${totalViews}`);
+        return new Response("OK", { status: 200 });
+      }
+
+      if (cmd === "/edit") {
+        const text = msg.text.replace("/edit", "").trim();
+        const parts = text.split("|").map((s) => s.trim());
+        if (parts.length < 2) {
+          await reply(chatId, "❌ Wrong format!\n\nUse:\n/edit <file_id> | <title> | <subject>\n\nExample:\n/edit BQACAgIA... | DSA Lecture 1 | DSA");
+          return new Response("OK", { status: 200 });
+        }
+        const [fileId, editTitle, editSubject] = parts;
+        const updated = await updateMaterial(fileId, { title: editTitle, subject: editSubject || "General" });
+        if (!updated) {
+          await reply(chatId, "❌ File ID not found. Upload the video first, then use /edit.");
+          return new Response("OK", { status: 200 });
+        }
+        await reply(chatId,
+          `✅ Updated Successfully!\n\n` +
+          `📚 Title: ${editTitle}\n` +
+          `📂 Subject: ${editSubject || "General"}\n` +
+          `🆔 File ID: <code>${fileId.substring(0, 30)}...</code>\n\n` +
+          `Students can now see this in the app! 🎉`
+        );
         return new Response("OK", { status: 200 });
       }
     }

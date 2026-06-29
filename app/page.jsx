@@ -17,6 +17,7 @@ export default function Home() {
   const [onlineCount, setOnlineCount] = useState(17829);
   const [user, setUser] = useState(null);
   const [playingMaterial, setPlayingMaterial] = useState(null);
+  const [allMaterials, setAllMaterials] = useState([]);
 
   // Init Telegram WebApp
   useEffect(() => {
@@ -63,13 +64,18 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch stats
+  // Fetch stats + all materials
   useEffect(() => {
     fetch("/api/stats")
       .then(r => r.json())
       .then(data => {
         if (data.onlineUsers) setOnlineCount(data.onlineUsers);
       })
+      .catch(() => {});
+    // Fetch all materials for related videos
+    fetch("/api/materials?limit=100")
+      .then(r => r.json())
+      .then(data => setAllMaterials(data.materials || []))
       .catch(() => {});
   }, []);
 
@@ -157,7 +163,9 @@ export default function Home() {
       {playingMaterial && (
         <VideoPlayer
           material={playingMaterial}
+          allMaterials={allMaterials}
           onClose={() => setPlayingMaterial(null)}
+          onVideoClick={handleVideoClick}
         />
       )}
     </div>
