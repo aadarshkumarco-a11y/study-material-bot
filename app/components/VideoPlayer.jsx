@@ -22,8 +22,14 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
   const controlsTimeout = useRef(null);
   const posSaveInterval = useRef(null);
 
-  // STABLE stream URL — only changes when file_id changes (NOT on every render!)
-  const streamUrl = useMemo(() => `/api/stream?file_id=${currentVideo.file_id}`, [currentVideo.file_id]);
+  // Use file_url directly if available (faster, no proxy needed)
+  // Otherwise use stream proxy
+  const streamUrl = useMemo(() => {
+    if (currentVideo.file_url) {
+      return currentVideo.file_url;
+    }
+    return `/api/stream?file_id=${currentVideo.file_id}`;
+  }, [currentVideo.file_id, currentVideo.file_url]);
   const botUsername = process.env.NEXT_PUBLIC_BOT_USERNAME || "semxybhabhi_bot";
 
   // Related videos (same subject or random)
@@ -153,6 +159,12 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
   };
 
   const handleDownload = async () => {
+    // If we have a direct file_url, use it
+    if (currentVideo.file_url) {
+      window.open(currentVideo.file_url, "_blank");
+      return;
+    }
+    // Otherwise try API
     try {
       const res = await fetch(`/api/file?file_id=${currentVideo.file_id}`);
       const data = await res.json();

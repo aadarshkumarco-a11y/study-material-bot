@@ -42,7 +42,7 @@ export async function POST(request) {
 
     console.log("[webhook] from:", fromId, "admin:", isAdmin, "isAdminCheck:", ADMIN_CHAT_ID);
 
-    // ---- Admin: Video upload (auto count-based naming) ----
+    // ---- Admin: Video upload (auto count-based naming + file URL caching) ----
     if (msg.video && isAdmin) {
       const video = msg.video;
 
@@ -51,6 +51,24 @@ export async function POST(request) {
       const videoCount = allMats.filter((m) => m.type === "video").length;
       const newCount = videoCount + 1;
       const autoTitle = `Video ${newCount}`;
+
+      // Try to get file URL immediately (works for files <20MB)
+      let fileUrl = null;
+      let isLargeFile = (video.file_size || 0) > 20 * 1024 * 1024; // 20MB
+
+      if (!isLargeFile) {
+        try {
+          const getFileRes = await fetch(
+            `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${video.file_id}`
+          );
+          const getFileData = await getFileRes.json();
+          if (getFileData.ok) {
+            fileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${getFileData.result.file_path}`;
+          }
+        } catch (e) {
+          console.log("[webhook] getFile failed (will use stream proxy):", e.message);
+        }
+      }
 
       const material = {
         id: Date.now().toString(),
@@ -66,15 +84,28 @@ export async function POST(request) {
         isPremium: false,
         uploadedAt: new Date().toISOString(),
         thumbnail_file_id: video.thumbnail?.file_id || null,
+        file_url: fileUrl, // cached URL (null for large files — stream proxy will handle)
+        is_large: isLargeFile,
       };
       await saveMaterial(material);
       const sizeMB = (video.file_size / 1048576).toFixed(1);
-      await reply(chatId,
-        `✅ Saved as "${autoTitle}"\n\n` +
-        `⏱ Duration: ${Math.floor(video.duration / 60)}:${String(video.duration % 60).padStart(2, "0")}\n` +
-        `📦 Size: ${sizeMB} MB\n\n` +
-        `🔄 App will show it instantly!`
-      );
+      
+      if (isLargeFile) {
+        await reply(chatId,
+          `✅ Saved as "${autoTitle}"\n\n` +
+          `⏱ Duration: ${Math.floor(video.duration / 60)}:${String(video.duration % 60).padStart(2, "0")}\n` +
+          `📦 Size: ${sizeMB} MB\n` +
+          `⚠️ Large file (>20MB) — video will play via stream proxy.\n\n` +
+          `🔄 App will show it instantly!`
+        );
+      } else {
+        await reply(chatId,
+          `✅ Saved as "${autoTitle}"\n\n` +
+          `⏱ Duration: ${Math.floor(video.duration / 60)}:${String(video.duration % 60).padStart(2, "0")}\n` +
+          `📦 Size: ${sizeMB} MB\n\n` +
+          `🔄 App will show it instantly!`
+        );
+      }
       return new Response("OK", { status: 200 });
     }
 
