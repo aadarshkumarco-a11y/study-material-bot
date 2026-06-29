@@ -37,6 +37,13 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
     const v = videoRef.current;
     if (!v) return;
 
+    // Reset state on video change
+    setLoading(true);
+    setError(null);
+    setPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+
     // Check resume position
     const saved = localStorage.getItem(`resume_${currentVideo.file_id}`);
     if (saved && parseFloat(saved) > 5) {
@@ -51,16 +58,18 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
     const onLoaded = () => {
       setDuration(v.duration || 0);
       setLoading(false);
-      if (resumePos && v) {
-        v.currentTime = resumePos;
-      }
     };
     const onTimeUpdate = () => setCurrentTime(v.currentTime);
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
-    const onError = () => { setError("Unable to play this video."); setLoading(false); };
+    const onError = (e) => {
+      console.error("[player] video error:", e);
+      setError("Unable to play this video.");
+      setLoading(false);
+    };
     const onWaiting = () => setLoading(true);
     const onPlaying = () => setLoading(false);
+    const onCanPlay = () => setLoading(false);
 
     v.addEventListener("loadedmetadata", onLoaded);
     v.addEventListener("timeupdate", onTimeUpdate);
@@ -69,6 +78,7 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
     v.addEventListener("error", onError);
     v.addEventListener("waiting", onWaiting);
     v.addEventListener("playing", onPlaying);
+    v.addEventListener("canplay", onCanPlay);
 
     // Save position every 5 seconds
     posSaveInterval.current = setInterval(() => {
@@ -85,12 +95,13 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
       v.removeEventListener("error", onError);
       v.removeEventListener("waiting", onWaiting);
       v.removeEventListener("playing", onPlaying);
+      v.removeEventListener("canplay", onCanPlay);
       clearInterval(posSaveInterval.current);
       if (v.currentTime > 0) {
         localStorage.setItem(`resume_${currentVideo.file_id}`, String(v.currentTime));
       }
     };
-  }, [currentVideo.file_id, currentVideo.id, resumePos]);
+  }, [currentVideo.file_id, currentVideo.id]);
 
   // Controls auto-hide
   const resetControlsTimer = () => {

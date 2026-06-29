@@ -1,8 +1,9 @@
-// app/api/stream/route.js — Proxy Telegram file stream with Range support
-// BUG 2 FIX: Always get fresh file path (Telegram URLs expire), proper Range forwarding
+// app/api/stream/route.js — Simple stream proxy (no Range complexity)
+// Gets file URL from Telegram, proxies the response directly.
 import { getFilePath, buildFileUrl } from "@/lib/telegram";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -13,7 +14,7 @@ export async function GET(request) {
   }
 
   try {
-    // Step 1: ALWAYS get FRESH file path (Telegram URLs expire!)
+    // Step 1: Get file path from Telegram
     const getFileRes = await fetch(
       `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/getFile?file_id=${fileId}`
     );
@@ -21,46 +22,44 @@ export async function GET(request) {
 
     if (!getFileData.ok) {
       console.error("[stream] getFile failed:", getFileData.description);
-      return new Response("File not found on Telegram", { status: 404 });
+      return new Response("File not found", { status: 404 });
     }
 
     const filePath = getFileData.result.file_path;
     const telegramUrl = `https://api.telegram.org/file/bot${process.env.TELEGRAM_BOT_TOKEN}/${filePath}`;
 
-    // Step 2: Forward Range header for video seeking
+    // Step 2: Forward Range header if present (for seeking)
     const rangeHeader = request.headers.get("range");
-    const fetchHeaders = {};
+    const headers = {};
     if (rangeHeader) {
-      fetchHeaders["Range"] = rangeHeader;
+      headers["Range"] = rangeHeader;
     }
 
-    // Step 3: Fetch from Telegram
-    const telegramRes = await fetch(telegramUrl, { headers: fetchHeaders });
+    // Step 3: Fetch file from Telegram
+    const fileRes = await fetch(telegramUrl, { headers });
 
-    if (!telegramRes.ok && telegramRes.status !== 206) {
-      console.error("[stream] Telegram fetch failed:", telegramRes.status);
-      return new Response("Failed to fetch from Telegram", { status: 502 });
+    if (!fileRes.ok && fileRes.status !== 206) {
+      console.error("[stream] fetch failed:", fileRes.status);
+      return new Response("Failed to fetch file", { status: 502 });
     }
 
-    // Step 4: Build response headers
+    // Step 4: Return with proper headers
     const responseHeaders = new Headers();
-    responseHeaders.set("Content-Type", telegramRes.headers.get("Content-Type") || "video/mp4");
+    responseHeaders.set("Content-Type", fileRes.headers.get("Content-Type") || "video/mp4");
     responseHeaders.set("Accept-Ranges", "bytes");
-    responseHeaders.set("Cache-Control", "no-store");
 
-    const contentLength = telegramRes.headers.get("Content-Length");
-    if (contentLength) responseHeaders.set("Content-Length", contentLength);
+    const cl = fileRes.headers.get("Content-Length");
+    if (cl) responseHeaders.set("Content-Length", cl);
 
-    const contentRange = telegramRes.headers.get("Content-Range");
-    if (contentRange) responseHeaders.set("Content-Range", contentRange);
+    const cr = fileRes.headers.get("Content-Range");
+    if (cr) responseHeaders.set("Content-Range", cr);
 
-    // Step 5: Stream back to client
-    return new Response(telegramRes.body, {
-      status: rangeHeader ? 206 : 200,
+    return new Response(fileRes.body, {
+      status: fileRes.status,
       headers: responseHeaders,
     });
   } catch (err) {
     console.error("[stream] error:", err.message);
-    return new Response("Stream error: " + err.message, { status: 500 });
+    return new Response("Stream error", { status: 500 });
   }
 }
