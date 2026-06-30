@@ -32,6 +32,18 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
   }, [currentVideo.file_id, currentVideo.file_url]);
   const botUsername = process.env.NEXT_PUBLIC_BOT_USERNAME || "semxybhabhi_bot";
 
+  // If no CDN URL, this is a large file — open in Telegram
+  const isLargeFile = !currentVideo.file_url && currentVideo.tg_message_id;
+
+  const openInTelegram = () => {
+    const link = `https://t.me/${botUsername}/${currentVideo.tg_message_id}`;
+    if (typeof window !== "undefined" && window.Telegram?.WebApp) {
+      window.Telegram.WebApp.openTelegramLink(link);
+    } else {
+      window.open(link, "_blank");
+    }
+  };
+
   // Related videos (same subject or random)
   const related = (allMaterials || [])
     .filter((m) => m.id !== currentVideo.id && (m.subject === currentVideo.subject || m.type === "video"))
@@ -218,7 +230,24 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
         <span className="bg-[#333] text-white text-xs font-bold px-2 py-1 rounded">HD</span>
       </div>
 
-      {/* Video */}
+      {/* Video area */}
+      {isLargeFile ? (
+        /* Large file — no CDN URL, show "Open in Telegram" */
+        <div className="relative bg-black flex flex-col items-center justify-center py-16 px-8">
+          <div className="w-16 h-16 rounded-full bg-[#1a1a1a] flex items-center justify-center mb-4">
+            <Play size={32} className="text-accent" fill="currentColor" />
+          </div>
+          <p className="text-white text-base font-bold mb-1">{currentVideo.title}</p>
+          <p className="text-gray-500 text-xs mb-6">Large video — opens in Telegram player</p>
+          <button
+            onClick={openInTelegram}
+            className="bg-tgblue text-white px-6 py-3 rounded-full text-sm font-bold flex items-center gap-2"
+          >
+            <Send size={16} /> Open in Telegram
+          </button>
+        </div>
+      ) : (
+      /* Normal video — CDN URL or stream proxy */
       <div className="relative bg-black flex items-center justify-center" onClick={resetControlsTimer}>
         {loading && !error && (
           <div className="absolute inset-0 flex items-center justify-center">
@@ -262,6 +291,7 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
           </button>
         )}
       </div>
+      )}
 
       {/* Controls bar */}
       <div className="bg-[#111] px-3 py-2 flex items-center gap-2" onClick={resetControlsTimer}>

@@ -108,7 +108,9 @@ export async function POST(request) {
         isPremium: false,
         uploadedAt: new Date().toISOString(),
         thumbnail_file_id: video.thumbnail?.file_id || null,
-        file_url: directUrl, // Direct CDN URL — no proxy needed!
+        file_url: directUrl, // Direct CDN URL — null if catbox failed
+        tg_chat_id: chatId, // For "Open in Telegram" fallback
+        tg_message_id: msg.message_id, // For deep link to original message
       };
       await saveMaterial(material);
       const sizeMB = (video.file_size / 1048576).toFixed(1);
@@ -126,7 +128,7 @@ export async function POST(request) {
           `✅ Saved as "${autoTitle}"\n\n` +
           `⏱ Duration: ${Math.floor(video.duration / 60)}:${String(video.duration % 60).padStart(2, "0")}\n` +
           `📦 Size: ${sizeMB} MB\n` +
-          `⚠️ CDN upload failed — video will use Telegram streaming (may not work for large files).\n\n` +
+          `▶️ Video will open in Telegram player (large file).\n\n` +
           `🔄 App will show it instantly!`
         );
       }
