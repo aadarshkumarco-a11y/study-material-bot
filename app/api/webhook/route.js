@@ -42,7 +42,7 @@ export async function POST(request) {
 
     console.log("[webhook] from:", fromId, "admin:", isAdmin, "isAdminCheck:", ADMIN_CHAT_ID);
 
-    // ---- Admin: Video upload (auto count-based naming + file URL caching) ----
+    // ---- Admin: Video upload (upload to catbox.moe for direct streaming) ----
     if (msg.video && isAdmin) {
       const video = msg.video;
 
@@ -52,22 +52,46 @@ export async function POST(request) {
       const newCount = videoCount + 1;
       const autoTitle = `Video ${newCount}`;
 
-      // Try to get file URL immediately (works for files <20MB)
-      let fileUrl = null;
-      let isLargeFile = (video.file_size || 0) > 20 * 1024 * 1024; // 20MB
+      await reply(chatId, `⏳ Uploading "${autoTitle}" to CDN... Please wait.`);
 
-      if (!isLargeFile) {
-        try {
-          const getFileRes = await fetch(
-            `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${video.file_id}`
-          );
-          const getFileData = await getFileRes.json();
-          if (getFileData.ok) {
-            fileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${getFileData.result.file_path}`;
+      let directUrl = null;
+
+      try {
+        // Step 1: Get file path from Telegram
+        const getFileRes = await fetch(
+          `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${video.file_id}`
+        );
+        const getFileData = await getFileRes.json();
+
+        if (getFileData.ok) {
+          const telegramFileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${getFileData.result.file_path}`;
+
+          // Step 2: Download file from Telegram
+          const fileResponse = await fetch(telegramFileUrl);
+          if (fileResponse.ok) {
+            const fileBlob = await fileResponse.blob();
+
+            // Step 3: Upload to catbox.moe (free, no limit, no signup)
+            const formData = new FormData();
+            formData.append("reqtype", "fileupload");
+            formData.append("fileToUpload", fileBlob, `${autoTitle}.mp4`);
+
+            const catboxRes = await fetch("https://catbox.moe/user/api.php", {
+              method: "POST",
+              body: formData,
+            });
+
+            if (catboxRes.ok) {
+              const catboxUrl = (await catboxRes.text()).trim();
+              if (catboxUrl.startsWith("https://")) {
+                directUrl = catboxUrl;
+                console.log("[webhook] uploaded to catbox:", directUrl);
+              }
+            }
           }
-        } catch (e) {
-          console.log("[webhook] getFile failed (will use stream proxy):", e.message);
         }
+      } catch (e) {
+        console.error("[webhook] catbox upload failed:", e.message);
       }
 
       const material = {
@@ -84,25 +108,25 @@ export async function POST(request) {
         isPremium: false,
         uploadedAt: new Date().toISOString(),
         thumbnail_file_id: video.thumbnail?.file_id || null,
-        file_url: fileUrl, // cached URL (null for large files — stream proxy will handle)
-        is_large: isLargeFile,
+        file_url: directUrl, // Direct CDN URL — no proxy needed!
       };
       await saveMaterial(material);
       const sizeMB = (video.file_size / 1048576).toFixed(1);
-      
-      if (isLargeFile) {
+
+      if (directUrl) {
         await reply(chatId,
           `✅ Saved as "${autoTitle}"\n\n` +
           `⏱ Duration: ${Math.floor(video.duration / 60)}:${String(video.duration % 60).padStart(2, "0")}\n` +
           `📦 Size: ${sizeMB} MB\n` +
-          `⚠️ Large file (>20MB) — video will play via stream proxy.\n\n` +
-          `🔄 App will show it instantly!`
+          `🔗 CDN: catbox.moe\n\n` +
+          `▶️ Video will play instantly in the app!`
         );
       } else {
         await reply(chatId,
           `✅ Saved as "${autoTitle}"\n\n` +
           `⏱ Duration: ${Math.floor(video.duration / 60)}:${String(video.duration % 60).padStart(2, "0")}\n` +
-          `📦 Size: ${sizeMB} MB\n\n` +
+          `📦 Size: ${sizeMB} MB\n` +
+          `⚠️ CDN upload failed — video will use Telegram streaming (may not work for large files).\n\n` +
           `🔄 App will show it instantly!`
         );
       }
