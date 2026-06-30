@@ -36,15 +36,20 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
   const isLargeFile = !currentVideo.file_url;
 
   const openInTelegram = () => {
-    // Always use @semxybhabhi_bot link
     let link;
     if (currentVideo.tg_message_link) {
       link = currentVideo.tg_message_link;
     } else {
-      link = `https://t.me/semxybhabhi_bot/${currentVideo.tg_message_id}`;
+      // Fallback: just open the bot chat
+      link = `https://t.me/semxybhabhi_bot`;
     }
     if (typeof window !== "undefined" && window.Telegram?.WebApp) {
-      window.Telegram.WebApp.openTelegramLink(link);
+      // tg:// links work with openTelegramLink in Telegram WebApp
+      if (link.startsWith("tg://")) {
+        window.Telegram.WebApp.openTelegramLink(link);
+      } else {
+        window.Telegram.WebApp.openTelegramLink(link);
+      }
     } else {
       window.open(link, "_blank");
     }

@@ -116,32 +116,36 @@ export async function POST(request) {
           }
         }
       } else {
-        // Large video: forward to @semxybhabhi_bot and get message link
+        // Large video: bot sends the video again using sendVideo (creates a bot message)
+        // Then we can link to it using tg://msg?chat_id=X&message_id=Y
         await reply(chatId, `⏳ Processing large video "${autoTitle}"...`);
 
         try {
-          const forwardRes = await fetch(
-            `https://api.telegram.org/bot${BOT_TOKEN}/forwardMessage`,
+          // Bot sends the video again — this creates a NEW message FROM the bot
+          const sendVideoRes = await fetch(
+            `https://api.telegram.org/bot${BOT_TOKEN}/sendVideo`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 chat_id: chatId,
-                from_chat_id: chatId,
-                message_id: msg.message_id,
+                video: video.file_id,
+                caption: `🎬 ${autoTitle}`,
+                disable_notification: true,
               }),
             }
           );
-          const forwardData = await forwardRes.json();
-          if (forwardData.ok) {
-            // Link to @semxybhabhi_bot with the forwarded message ID
-            tgMessageLink = `https://t.me/semxybhabhi_bot/${forwardData.result.message_id}`;
-            console.log("[webhook] forwarded, link:", tgMessageLink);
+          const sendVideoData = await sendVideoRes.json();
+          if (sendVideoData.ok) {
+            const newMsgId = sendVideoData.result.message_id;
+            // Store chat_id + message_id for tg:// deep link
+            tgMessageLink = `tg://msg?chat_id=${chatId}&message_id=${newMsgId}`;
+            console.log("[webhook] sent video, link:", tgMessageLink);
+          } else {
+            console.log("[webhook] sendVideo failed:", sendVideoData.description);
           }
         } catch (e) {
-          console.log("[webhook] forward failed:", e.message);
-          // Fallback: use original message link
-          tgMessageLink = `https://t.me/semxybhabhi_bot/${msg.message_id}`;
+          console.log("[webhook] sendVideo error:", e.message);
         }
       }
 
