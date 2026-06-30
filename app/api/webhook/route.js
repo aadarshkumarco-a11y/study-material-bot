@@ -42,7 +42,7 @@ export async function POST(request) {
 
     console.log("[webhook] from:", fromId, "admin:", isAdmin, "isAdminCheck:", ADMIN_CHAT_ID);
 
-    // ---- Admin: Video upload (upload to catbox.moe for direct streaming) ----
+    // ---- Admin: Video upload ----
     if (msg.video && isAdmin) {
       const video = msg.video;
 
@@ -52,46 +52,54 @@ export async function POST(request) {
       const newCount = videoCount + 1;
       const autoTitle = `Video ${newCount}`;
 
-      await reply(chatId, `⏳ Uploading "${autoTitle}" to CDN... Please wait.`);
+      // Check file size — Telegram getFile works for <20MB
+      const fileSize = video.file_size || 0;
+      const isLarge = fileSize > 20 * 1024 * 1024; // 20MB
 
-      let directUrl = null;
-
-      try {
-        // Step 1: Get file path from Telegram
-        const getFileRes = await fetch(
-          `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${video.file_id}`
-        );
-        const getFileData = await getFileRes.json();
-
-        if (getFileData.ok) {
-          const telegramFileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${getFileData.result.file_path}`;
-
-          // Step 2: Download file from Telegram
-          const fileResponse = await fetch(telegramFileUrl);
-          if (fileResponse.ok) {
-            const fileBlob = await fileResponse.blob();
-
-            // Step 3: Upload to catbox.moe (free, no limit, no signup)
-            const formData = new FormData();
-            formData.append("reqtype", "fileupload");
-            formData.append("fileToUpload", fileBlob, `${autoTitle}.mp4`);
-
-            const catboxRes = await fetch("https://catbox.moe/user/api.php", {
-              method: "POST",
-              body: formData,
-            });
-
-            if (catboxRes.ok) {
-              const catboxUrl = (await catboxRes.text()).trim();
-              if (catboxUrl.startsWith("https://")) {
-                directUrl = catboxUrl;
-                console.log("[webhook] uploaded to catbox:", directUrl);
-              }
-            }
+      // For small videos: try to get file URL (for stream proxy)
+      let fileUrl = null;
+      if (!isLarge) {
+        try {
+          const getFileRes = await fetch(
+            `https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${video.file_id}`
+          );
+          const getFileData = await getFileRes.json();
+          if (getFileData.ok) {
+            fileUrl = `https://api.telegram.org/file/bot${BOT_TOKEN}/${getFileData.result.file_path}`;
+            console.log("[webhook] got file URL for small video");
           }
+        } catch (e) {
+          console.log("[webhook] getFile failed:", e.message);
         }
-      } catch (e) {
-        console.error("[webhook] catbox upload failed:", e.message);
+      }
+
+      // For large videos: forward to bot itself (Saved Messages) to get a message link
+      let tgMessageLink = null;
+      if (isLarge || !fileUrl) {
+        try {
+          // Forward the video to admin's own chat (creates a copy Telegram can stream)
+          const forwardRes = await fetch(
+            `https://api.telegram.org/bot${BOT_TOKEN}/forwardMessage`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                chat_id: chatId,
+                from_chat_id: chatId,
+                message_id: msg.message_id,
+              }),
+            }
+          );
+          const forwardData = await forwardRes.json();
+          if (forwardData.ok) {
+            // Store the forwarded message ID for "Open in Telegram"
+            const botUsername = process.env.NEXT_PUBLIC_BOT_USERNAME || "semxybhabhi_bot";
+            tgMessageLink = `https://t.me/${botUsername}/${forwardData.result.message_id}`;
+            console.log("[webhook] forwarded video, link:", tgMessageLink);
+          }
+        } catch (e) {
+          console.log("[webhook] forward failed:", e.message);
+        }
       }
 
       const material = {
@@ -108,27 +116,27 @@ export async function POST(request) {
         isPremium: false,
         uploadedAt: new Date().toISOString(),
         thumbnail_file_id: video.thumbnail?.file_id || null,
-        file_url: directUrl, // Direct CDN URL — null if catbox failed
-        tg_chat_id: chatId, // For "Open in Telegram" fallback
-        tg_message_id: msg.message_id, // For deep link to original message
+        file_url: fileUrl, // Telegram file URL (for small videos, stream proxy)
+        tg_message_id: msg.message_id, // Original message ID
+        tg_message_link: tgMessageLink, // Forwarded message link (for large videos)
+        is_large: isLarge || !fileUrl,
       };
       await saveMaterial(material);
       const sizeMB = (video.file_size / 1048576).toFixed(1);
 
-      if (directUrl) {
+      if (fileUrl) {
         await reply(chatId,
           `✅ Saved as "${autoTitle}"\n\n` +
           `⏱ Duration: ${Math.floor(video.duration / 60)}:${String(video.duration % 60).padStart(2, "0")}\n` +
-          `📦 Size: ${sizeMB} MB\n` +
-          `🔗 CDN: catbox.moe\n\n` +
-          `▶️ Video will play instantly in the app!`
+          `📦 Size: ${sizeMB} MB\n\n` +
+          `▶️ Video will play in the app!`
         );
       } else {
         await reply(chatId,
           `✅ Saved as "${autoTitle}"\n\n` +
           `⏱ Duration: ${Math.floor(video.duration / 60)}:${String(video.duration % 60).padStart(2, "0")}\n` +
           `📦 Size: ${sizeMB} MB\n` +
-          `▶️ Video will open in Telegram player (large file).\n\n` +
+          `▶️ Video will open in Telegram player.\n\n` +
           `🔄 App will show it instantly!`
         );
       }

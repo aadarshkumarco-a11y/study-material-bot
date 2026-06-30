@@ -33,10 +33,16 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
   const botUsername = process.env.NEXT_PUBLIC_BOT_USERNAME || "semxybhabhi_bot";
 
   // If no CDN URL, this is a large file — open in Telegram
-  const isLargeFile = !currentVideo.file_url && currentVideo.tg_message_id;
+  const isLargeFile = !currentVideo.file_url;
 
   const openInTelegram = () => {
-    const link = `https://t.me/${botUsername}/${currentVideo.tg_message_id}`;
+    // Use tg_message_link if available (forwarded message), else use message_id
+    let link;
+    if (currentVideo.tg_message_link) {
+      link = currentVideo.tg_message_link;
+    } else {
+      link = `https://t.me/${botUsername}/${currentVideo.tg_message_id}`;
+    }
     if (typeof window !== "undefined" && window.Telegram?.WebApp) {
       window.Telegram.WebApp.openTelegramLink(link);
     } else {
