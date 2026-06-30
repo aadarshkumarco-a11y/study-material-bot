@@ -22,8 +22,8 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
   const controlsTimeout = useRef(null);
   const posSaveInterval = useRef(null);
 
-  // Use file_url directly if available (faster, no proxy needed)
-  // Otherwise use stream proxy
+  // Small video: file_url (catbox or Telegram) → play in-app
+  // Large video: no file_url → show "Open in Telegram" with tg_message_link
   const streamUrl = useMemo(() => {
     if (currentVideo.file_url) {
       return currentVideo.file_url;
@@ -32,16 +32,16 @@ export default function VideoPlayer({ material, allMaterials, onClose, onVideoCl
   }, [currentVideo.file_id, currentVideo.file_url]);
   const botUsername = process.env.NEXT_PUBLIC_BOT_USERNAME || "semxybhabhi_bot";
 
-  // If no CDN URL, this is a large file — open in Telegram
+  // Large file = no file_url AND has tg_message_link or tg_message_id
   const isLargeFile = !currentVideo.file_url;
 
   const openInTelegram = () => {
-    // Use tg_message_link if available (forwarded message), else use message_id
+    // Always use @semxybhabhi_bot link
     let link;
     if (currentVideo.tg_message_link) {
       link = currentVideo.tg_message_link;
     } else {
-      link = `https://t.me/${botUsername}/${currentVideo.tg_message_id}`;
+      link = `https://t.me/semxybhabhi_bot/${currentVideo.tg_message_id}`;
     }
     if (typeof window !== "undefined" && window.Telegram?.WebApp) {
       window.Telegram.WebApp.openTelegramLink(link);
